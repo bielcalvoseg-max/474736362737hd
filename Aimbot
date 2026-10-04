@@ -1,1 +1,583 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 
+-- Carregamento da Rayfield Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "PAINEL | AIMBOT & ESP",
+    LoadingTitle = "Iniciando...",
+    LoadingSubtitle = "por Bielcalvokkj",
+    ConfigurationSaving = {
+        Enabled = false
+    },
+    Discord = {
+        Enabled = false
+    },
+    KeySystem = false
+})
+
+local Config = {
+    Aimbot = false,
+    Smoothness = 0.85,
+    FOV = 130,
+    TargetPart = "Cabeça",
+    TargetFilter = "Ambos (Todos)", -- "Apenas Jogadores", "Apenas NPCs / Zumbis / Animais", "Ambos (Todos)"
+    TeamCheck = true,
+    NoRecoil = true,
+    InstantPrompt = false,
+    PlayerESP = false,
+    ESPMaxDistance = 700
+}
+
+-- Container de Interface Local
+local ESPGui = Instance.new("ScreenGui")
+ESPGui.Name = "Hub_Secure_ESP"
+ESPGui.ResetOnSpawn = false
+ESPGui.IgnoreGuiInset = true
+
+if syn and syn.protect_gui then
+    syn.protect_gui(ESPGui)
+    ESPGui.Parent = game:GetService("CoreGui")
+elseif gethui then
+    ESPGui.Parent = gethui()
+else
+    pcall(function()
+        ESPGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end)
+end
+
+-- Círculo FOV Centralizado
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "Circle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+FOVCircle.Size = UDim2.new(0, Config.FOV * 2, 0, Config.FOV * 2)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.Parent = ESPGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(1, 0)
+Corner.Parent = FOVCircle
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(255, 255, 255)
+Stroke.Thickness = 1.5
+Stroke.Transparency = 0.2
+Stroke.Parent = FOVCircle
+
+-- Ponto Central da Mira
+local CenterDot = Instance.new("Frame")
+CenterDot.Name = "CenterDot"
+CenterDot.AnchorPoint = Vector2.new(0.5, 0.5)
+CenterDot.Position = UDim2.new(0.5, 0, 0.5, 0)
+CenterDot.Size = UDim2.new(0, 4, 0, 4)
+CenterDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CenterDot.BorderSizePixel = 0
+CenterDot.Visible = false
+CenterDot.Parent = ESPGui
+
+local DotCorner = Instance.new("UICorner")
+DotCorner.CornerRadius = UDim.new(1, 0)
+DotCorner.Parent = CenterDot
+
+-- Abas
+local CombatTab = Window:CreateTab("🎯 Aimbot", 4483362458)
+local VisualTab = Window:CreateTab("👁️ Visuais (ESP)", 4483362458)
+local MiscTab = Window:CreateTab("⚡ Utilidades", 4483362458)
+
+-- 1. COMBATE
+CombatTab:CreateSection("Configurações do Aimbot")
+
+CombatTab:CreateToggle({
+    Name = "Ativar Aimbot",
+    CurrentValue = false,
+    Flag = "AimbotToggle",
+    Callback = function(Value)
+        Config.Aimbot = Value
+        FOVCircle.Visible = Value
+        CenterDot.Visible = Value
+    end
+})
+
+CombatTab:CreateDropdown({
+    Name = "Filtro de Alvo",
+    Options = {"Ambos (Todos)", "Apenas Jogadores", "Apenas NPCs / Zumbis / Animais"},
+    CurrentOption = "Ambos (Todos)",
+    Flag = "TargetFilterDropdown",
+    Callback = function(Option)
+        Config.TargetFilter = Option
+    end
+})
+
+CombatTab:CreateDropdown({
+    Name = "Área de Foco (Onde Gruda)",
+    Options = {"Cabeça", "Peito", "Pedaço / Tronco"},
+    CurrentOption = "Cabeça",
+    Flag = "TargetPartDropdown",
+    Callback = function(Option)
+        Config.TargetPart = Option
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Força da Mira (1.0 = Travada Direta)",
+    Range = {0.1, 1},
+    Increment = 0.05,
+    Suffix = "x",
+    CurrentValue = Config.Smoothness,
+    Flag = "SmoothSlider",
+    Callback = function(Value)
+        Config.Smoothness = Value
+    end
+})
+
+CombatTab:CreateSlider({
+    Name = "Tamanho do Círculo (FOV)",
+    Range = {30, 450},
+    Increment = 5,
+    Suffix = "px",
+    CurrentValue = Config.FOV,
+    Flag = "FOVSlider",
+    Callback = function(Value)
+        Config.FOV = Value
+        FOVCircle.Size = UDim2.new(0, Value * 2, 0, Value * 2)
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Ignorar Apenas Minha Equipe (Jogadores)",
+    CurrentValue = true,
+    Flag = "TeamCheckToggle",
+    Callback = function(Value)
+        Config.TeamCheck = Value
+    end
+})
+
+CombatTab:CreateToggle({
+    Name = "Compensador de Recuo (Sem Tremer)",
+    CurrentValue = true,
+    Flag = "NoRecoilToggle",
+    Callback = function(Value)
+        Config.NoRecoil = Value
+    end
+})
+
+-- 2. VISUAIS (ESP)
+VisualTab:CreateSection("Rastreadores")
+
+VisualTab:CreateToggle({
+    Name = "ESP Jogadores (Caixa / Distância / Item)",
+    CurrentValue = false,
+    Flag = "PlayerESPToggle",
+    Callback = function(Value)
+        Config.PlayerESP = Value
+    end
+})
+
+VisualTab:CreateSlider({
+    Name = "Distância Máxima do ESP",
+    Range = {100, 1500},
+    Increment = 50,
+    Suffix = "m",
+    CurrentValue = Config.ESPMaxDistance,
+    Flag = "ESPDistSlider",
+    Callback = function(Value)
+        Config.ESPMaxDistance = Value
+    end
+})
+
+-- 3. UTILIDADES
+MiscTab:CreateSection("Interações Rápidas")
+
+MiscTab:CreateToggle({
+    Name = "Interação Instantânea (1 Clique no E)",
+    CurrentValue = false,
+    Flag = "InstantPromptToggle",
+    Callback = function(Value)
+        Config.InstantPrompt = Value
+        if Value then
+            for _, prompt in ipairs(Workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    prompt.HoldDuration = 0
+                end
+            end
+        end
+    end
+})
+
+-- Zera o tempo de segurar o E instantaneamente em qualquer ProximityPrompt
+ProximityPromptService.PromptShown:Connect(function(prompt)
+    if Config.InstantPrompt then
+        prompt.HoldDuration = 0
+    end
+end)
+
+-- Identificação do Time/Equipe do Jogador
+local function GetPlayerTeamName(player)
+    if not player then return nil end
+
+    if player.Team and player.Team.Name ~= "" then
+        return player.Team.Name
+    end
+
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        local teamVal = leaderstats:FindFirstChild("Time") 
+            or leaderstats:FindFirstChild("Team") 
+            or leaderstats:FindFirstChild("Organizacao") 
+            or leaderstats:FindFirstChild("Org") 
+            or leaderstats:FindFirstChild("Cargo") 
+            or leaderstats:FindFirstChild("Faccao") 
+            or leaderstats:FindFirstChild("Fac")
+
+        if teamVal and tostring(teamVal.Value) ~= "" and tostring(teamVal.Value) ~= "0" then
+            return tostring(teamVal.Value)
+        end
+    end
+
+    local attrTeam = player:GetAttribute("Team") 
+        or player:GetAttribute("Time") 
+        or player:GetAttribute("Org") 
+        or player:GetAttribute("Cargo")
+
+    if attrTeam and tostring(attrTeam) ~= "" then
+        return tostring(attrTeam)
+    end
+
+    return nil
+end
+
+local function IsTeammate(player)
+    if not Config.TeamCheck then return false end
+    if player == LocalPlayer then return true end
+
+    local myTeam = GetPlayerTeamName(LocalPlayer)
+    local targetTeam = GetPlayerTeamName(player)
+
+    if not myTeam or not targetTeam then
+        return false
+    end
+
+    return myTeam:upper() == targetTeam:upper()
+end
+
+-- Busca flexível para qualquer modelo (Players, Zumbis, Animais e NPCs customizados)
+local function GetTargetPart(model)
+    if not model or not model:IsA("Model") then return nil end
+
+    if Config.TargetPart == "Cabeça" then
+        local head = model:FindFirstChild("Head") or model:FindFirstChild("head")
+        if head and head:IsA("BasePart") then return head end
+
+        for _, part in ipairs(model:GetChildren()) do
+            if part:IsA("BasePart") and (part.Name:lower():find("head") or part.Name:lower():find("cabeça") or part.Name:lower():find("cabeca")) then
+                return part
+            end
+        end
+    elseif Config.TargetPart == "Peito" then
+        local torso = model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or model:FindFirstChild("Chest") or model:FindFirstChild("HumanoidRootPart")
+        if torso and torso:IsA("BasePart") then return torso end
+
+        for _, part in ipairs(model:GetChildren()) do
+            if part:IsA("BasePart") and (part.Name:lower():find("torso") or part.Name:lower():find("chest") or part.Name:lower():find("peito")) then
+                return part
+            end
+        end
+    elseif Config.TargetPart == "Pedaço / Tronco" then
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("LowerTorso") or model:FindFirstChild("Torso")
+        if root and root:IsA("BasePart") then return root end
+    end
+
+    -- Fallback universal garantido
+    return model.PrimaryPart 
+        or model:FindFirstChild("Head") 
+        or model:FindFirstChild("HumanoidRootPart") 
+        or model:FindFirstChildWhichIsA("BasePart")
+end
+
+local function GetScreenCenter()
+    return Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+end
+
+-- Varredura contínua de NPCs, Inimigos, Zumbis e Animais
+local cachedNPCs = {}
+
+local function ScanNPCs()
+    local temp = {}
+    local seen = {}
+
+    -- 1. Varredura por Humanoid existente
+    for _, hum in ipairs(Workspace:GetDescendants()) do
+        if hum:IsA("Humanoid") then
+            local model = hum:FindFirstAncestorOfClass("Model")
+            if model and not Players:GetPlayerFromCharacter(model) and not seen[model] then
+                seen[model] = true
+                table.insert(temp, model)
+            end
+        end
+    end
+
+    -- 2. Varredura por nomes típicos em pastas ou modelos sem Humanoid padrão
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) and not seen[obj] then
+            local n = obj.Name:lower()
+            if n:find("zomb") or n:find("enemy") or n:find("mob") or n:find("npc") or n:find("anim") or n:find("mutant") or n:find("creature") then
+                seen[obj] = true
+                table.insert(temp, obj)
+            end
+        elseif obj:IsA("Folder") or obj:IsA("Configuration") then
+            local fn = obj.Name:lower()
+            if fn:find("zomb") or fn:find("npc") or fn:find("mob") or fn:find("enem") or fn:find("anim") or fn:find("entit") or fn:find("creature") then
+                for _, sub in ipairs(obj:GetChildren()) do
+                    if sub:IsA("Model") and not Players:GetPlayerFromCharacter(sub) and not seen[sub] then
+                        seen[sub] = true
+                        table.insert(temp, sub)
+                    end
+                end
+            end
+        end
+    end
+
+    cachedNPCs = temp
+end
+
+task.spawn(function()
+    while true do
+        pcall(ScanNPCs)
+        task.wait(1)
+    end
+end)
+
+-- Busca Unificada de Alvo (Jogadores, Zumbis, Animais e NPCs)
+local function GetClosestTarget()
+    local center = GetScreenCenter()
+    local bestTarget = nil
+    local shortestDist = Config.FOV
+
+    local function EvaluateTarget(model)
+        if not model or not model.Parent then return end
+
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local isAlive = true
+
+        if hum then
+            if hum.Health <= 0 then
+                isAlive = false
+            end
+        else
+            local hp = model:GetAttribute("Health") or model:GetAttribute("HP") or model:GetAttribute("Vida")
+            if hp and type(hp) == "number" and hp <= 0 then
+                isAlive = false
+            end
+        end
+
+        if isAlive then
+            local part = GetTargetPart(model)
+            if part then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen and screenPos.Z > 0 then
+                    local targetScreenPos = Vector2.new(screenPos.X, screenPos.Y)
+                    local dist = (targetScreenPos - center).Magnitude
+                    if dist <= shortestDist then
+                        shortestDist = dist
+                        bestTarget = part
+                    end
+                end
+            end
+        end
+    end
+
+    -- 1. Avalia Jogadores
+    if Config.TargetFilter == "Apenas Jogadores" or Config.TargetFilter == "Ambos (Todos)" then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                if not IsTeammate(player) then
+                    EvaluateTarget(player.Character)
+                end
+            end
+        end
+    end
+
+    -- 2. Avalia NPCs, Zumbis, Inimigos e Animais
+    if Config.TargetFilter == "Apenas NPCs / Zumbis / Animais" or Config.TargetFilter == "Ambos (Todos)" then
+        for _, npcModel in ipairs(cachedNPCs) do
+            EvaluateTarget(npcModel)
+        end
+    end
+
+    return bestTarget
+end
+
+-- Controle de Câmera (Aimbot e Zero Recoil)
+local lockedPitch = nil
+local lockedYaw = nil
+local isAimingLocked = false
+
+RunService:BindToRenderStep("Hub_Combat_Controller", Enum.RenderPriority.Camera.Value + 100, function()
+    isAimingLocked = false
+
+    -- Aimbot Centralizado
+    if Config.Aimbot then
+        local targetPart = GetClosestTarget()
+        if targetPart then
+            isAimingLocked = true
+            local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+            if Config.Smoothness >= 0.95 then
+                Camera.CFrame = targetCFrame
+            else
+                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, Config.Smoothness)
+            end
+        end
+    end
+
+    -- No Recoil Estabilizado
+    if Config.NoRecoil then
+        local pitch, yaw, roll = Camera.CFrame:ToOrientation()
+        local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+
+        if isFiring and not isAimingLocked then
+            local mouseDelta = UserInputService:GetMouseDelta()
+
+            if math.abs(mouseDelta.Y) > 1.2 or math.abs(mouseDelta.X) > 1.2 then
+                lockedPitch = pitch
+                lockedYaw = yaw
+            elseif lockedPitch and lockedYaw then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position) * CFrame.fromOrientation(lockedPitch, lockedYaw, 0)
+            else
+                lockedPitch = pitch
+                lockedYaw = yaw
+            end
+        else
+            lockedPitch = pitch
+            lockedYaw = yaw
+        end
+    else
+        lockedPitch = nil
+        lockedYaw = nil
+    end
+end)
+
+-- Sistema de ESP Jogadores
+local playerVisuals = {}
+
+local function RemovePlayerVisual(player)
+    if playerVisuals[player] then
+        pcall(function() playerVisuals[player].Billboard:Destroy() end)
+        pcall(function() playerVisuals[player].Highlight:Destroy() end)
+        playerVisuals[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(RemovePlayerVisual)
+
+local function GetOrCreatePlayerVisual(player, char, anchorPart)
+    local data = playerVisuals[player]
+
+    if not data or data.Char ~= char or not data.Billboard or not data.Billboard.Parent then
+        RemovePlayerVisual(player)
+
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "ESP_Tag_" .. player.Name
+        bb.Adornee = anchorPart
+        bb.Size = UDim2.new(0, 190, 0, 48)
+        bb.StudsOffset = Vector3.new(0, 3.2, 0)
+        bb.AlwaysOnTop = true
+        bb.LightInfluence = 0
+        bb.MaxDistance = Config.ESPMaxDistance
+        bb.Enabled = false
+        bb.Parent = ESPGui
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 12
+        lbl.TextStrokeTransparency = 0
+        lbl.Parent = bb
+
+        local hl = Instance.new("Highlight")
+        hl.Name = "ESP_HL_" .. player.Name
+        hl.Adornee = char
+        hl.FillTransparency = 0.75
+        hl.OutlineTransparency = 0
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Enabled = false
+        pcall(function() hl.Parent = char end)
+
+        data = {
+            Char = char,
+            Anchor = anchorPart,
+            Billboard = bb,
+            Label = lbl,
+            Highlight = hl
+        }
+        playerVisuals[player] = data
+    else
+        data.Billboard.Adornee = anchorPart
+        data.Highlight.Adornee = char
+        data.Billboard.MaxDistance = Config.ESPMaxDistance
+    end
+
+    return data
+end
+
+-- Loop de Atualização do ESP
+task.spawn(function()
+    while true do
+        local myRoot = LocalPlayer.Character and (LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character:FindFirstChild("Head"))
+        local myPos = myRoot and myRoot.Position or Camera.CFrame.Position
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local char = player.Character
+                if char and char.Parent then
+                    local anchor = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart")
+
+                    if anchor then
+                        local dist = math.floor((anchor.Position - myPos).Magnitude)
+
+                        if Config.PlayerESP and dist <= Config.ESPMaxDistance then
+                            local data = GetOrCreatePlayerVisual(player, char, anchor)
+
+                            local isTeammate = IsTeammate(player)
+                            local teamCol = isTeammate and Color3.fromRGB(0, 255, 120) or Color3.fromRGB(255, 50, 50)
+                            
+                            data.Highlight.OutlineColor = teamCol
+                            data.Highlight.FillColor = teamCol
+                            data.Highlight.Enabled = true
+                            data.Billboard.Enabled = true
+
+                            local tool = char:FindFirstChildOfClass("Tool")
+                            local item = tool and tool.Name or "Mãos Limpas"
+                            local teamName = GetPlayerTeamName(player) or "Sem Time"
+
+                            data.Label.Text = string.format("[%s] %s [%dm]\nItem: %s", teamName, player.DisplayName, dist, item)
+                        else
+                            if playerVisuals[player] then
+                                playerVisuals[player].Billboard.Enabled = false
+                                playerVisuals[player].Highlight.Enabled = false
+                            end
+                        end
+                    else
+                        if playerVisuals[player] then
+                            playerVisuals[player].Billboard.Enabled = false
+                            playerVisuals[player].Highlight.Enabled = false
+                        end
+                    end
+                else
+                    RemovePlayerVisual(player)
+                end
+            end
+        end
+
+        task.wait(0.1)
+    end
+end)
